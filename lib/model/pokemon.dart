@@ -32,5 +32,5 @@ class Pokemon {
         imageURL:imageURL
     );
   }
-
+  String get formatName => name[0].toUpperCase() + name.substring(1);
 }

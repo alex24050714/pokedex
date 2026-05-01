@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../model/pokemon.dart';
+import '../model/evolutions.dart';
 
 class PokemonService {
   static const String pokeURL = 'https://pokeapi.co/api/v2';
@@ -24,6 +25,42 @@ class PokemonService {
     }catch (e){
       if(e is Exception) rethrow;
       throw Exception('Error inesperado: $e');
+    }
+  }
+
+  Future<String> EvolutionChainUrl(int pokemonId) async {
+    final response = await http.get(Uri.parse('$pokeURL/pokemon-species/$pokemonId'),
+    );
+    if(response.statusCode != 200) return '';
+    final json = jsonDecode(response.body);
+    return json['evolution_chain']['url'] as String;
+  }
+
+  Future<List<Evolutions>> fetchEvolutionChain (int pokemonId) async {
+    try{
+      final chainUrl = await EvolutionChainUrl(pokemonId);
+      if(chainUrl.isEmpty) return [];
+
+      final chainResponse = await http.get(Uri.parse(chainUrl));
+      if(chainResponse.statusCode != 200) return [];
+
+      final chainJson = jsonDecode(chainResponse.body);
+
+      final List<String> names = [];
+      var current = chainJson['chain'];
+      while (current != null){
+        names.add(current['species']['name'] as String);
+        final evolves = current['evolves_to'] as List;
+        current = evolves.isNotEmpty ? evolves[0] : null;
+      }
+      final List<Evolutions> steps = [];
+      for(final name in names){
+        final p = await fetchPokemon(name);
+        steps.add(Evolutions(name: p.formatName, imageURL: p.imageURL));
+      }
+      return steps;
+    }catch(_){
+      return [];
     }
   }
 }
