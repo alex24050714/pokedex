@@ -16,186 +16,151 @@ class _PokedexScreen extends State<PokedexScreen> {
   final PokemonService _service = PokemonService();
 
   Pokemon? _pokemon;
-  bool cargando = false;
-  bool cargandoEvo = false;
-  String? _errorMessage;
   List<Evolutions> _evo = [];
+  bool cargando = false;
+  String? _error;
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  List<String> historial = [];
+  List<String> favoritos = [];
 
-  Future<void> busqueda() async {
-    final query = _controller.text.trim();
-    if (query.isEmpty) return;
-
-    FocusScope.of(context).unfocus();
-
+  void _buscar() async {
+    if (_controller.text.isEmpty) return;
     setState(() {
       cargando = true;
-      _errorMessage = null;
-      _pokemon = null;
-      _evo = [];
+      _error = null;
     });
 
     try {
-      final pokemon = await _service.fetchPokemon(query);
+      final p = await _service.fetchPokemon(_controller.text.trim());
+      if(!historial.contains(p.formatName)){
+        setState(() {
+          historial.insert(0, p.formatName);
+        });
+      }
       setState(() {
-        _pokemon = pokemon;
-        cargando = false;
-        cargandoEvo = true;
+        _pokemon = p;
       });
-
-      final steps = await _service.fetchEvolutionChain(pokemon.id);
+      final e = await _service.fetchEvolutionChain(p.id);
       setState(() {
-        _evo = steps;
-        cargandoEvo = false;
+        _evo = e;
+        cargando = false;
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _error = "No encontrado";
         cargando = false;
+        _pokemon = null;
       });
     }
+  }
+
+  void _favoritos(String nombre) {
+    setState(() {
+      if(favoritos.contains(nombre)){
+        favoritos.remove(nombre);
+      }
+      else{
+        favoritos.add(nombre);
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF2F2F2),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Pokédex',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-            color: Colors.black,
-          ),
-        ),
-        centerTitle: false,
-      ),
+        title: const Text('Pokédex'),
+        actions: [
+          Padding(padding: const EdgeInsets.only(right: 15),
+          child: Row(
+            children: [
+              const Icon(Icons.favorite, size: 20),
+              const SizedBox(width: 5),
+              Text('${favoritos.length}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              )
+            ],
+          )
+          )
+        ]),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _buildSearchBar(),
-            const SizedBox(height: 24),
-            _buildBody(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Padding(
-            padding: EdgeInsets.only(left: 14),
-            child: Icon(Icons.search, color: Colors.grey),
-          ),
-          Expanded(
-            child: TextField(
+            TextField(
               controller: _controller,
-              decoration: const InputDecoration(
-                hintText: 'Nombre o número...',
-                border: InputBorder.none,
-                contentPadding:
-                EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+              decoration: InputDecoration(
+                hintText: 'Nombre o ID...',
+                suffixIcon: IconButton(
+                    onPressed: _buscar, icon: const Icon(Icons.search)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15)),
               ),
-              onSubmitted: (_) => busqueda(),
+              onSubmitted: (_) => _buscar(),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(6),
-            child: ElevatedButton(
-              onPressed: cargando ? null : busqueda,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 18, vertical: 12),
-              ),
-              child: const Text(
-                'Buscar',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-        ],
+
+            _buildHistorial(),
+            const SizedBox(height: 20),
+            _buildContent(),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildBody() {
-    if (cargando) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 80),
-        child: CircularProgressIndicator(color: Colors.red),
-      );
-    }
+  Widget _buildHistorial() {
+    if (historial.isEmpty) return const SizedBox.shrink();
 
-    if (_errorMessage != null) {
-      return Padding(
-        padding: const EdgeInsets.only(top: 60),
-        child: Column(
-          children: [
-            Icon(Icons.sentiment_dissatisfied,
-                size: 60, color: Colors.grey),
-            const SizedBox(height: 12),
-            Text(
-              _errorMessage!,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 15),
-            ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(top: 15, left: 5, bottom: 5),
+          child: Text("Recientes:", style: TextStyle(fontSize: 12, color: Colors.grey)),
         ),
-      );
-    }
-
-    final pokemon = _pokemon;
-    if (pokemon != null) {
-      return PokemonCard(
-        pokemon: pokemon,
-        evolutions: _evo,
-        loadingEvolution: cargandoEvo,
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 80),
-      child: Column(
-        children: [
-          Icon(Icons.catching_pokemon,
-              size: 90, color: Colors.grey),
-          const SizedBox(height: 16),
-          Text(
-            'Introduce un Pokémon para empezar',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey, fontSize: 16),
+        SizedBox(
+          height: 35,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: historial.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  backgroundColor: Colors.white,
+                  label: Text(historial[index], style: const TextStyle(fontSize: 12)),
+                  onPressed: () {
+                    _controller.text = historial[index];
+                    _buscar();
+                  },
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContent() {
+    if (cargando && _pokemon == null)
+      return const Center(child: CircularProgressIndicator());
+    if (_error != null)
+      return Text(_error!,
+          style: const TextStyle(color: Colors.red));
+    if (_pokemon == null)
+      return const Opacity(
+          opacity: 0.5,
+          child: Icon(Icons.catching_pokemon, size: 100));
+
+    return PokemonCard(
+      pokemon: _pokemon!,
+      evolutions: _evo,
+      cargandoEvo: cargando,
+      esFavorito: favoritos.contains(_pokemon!.formatName),
+      onFavoritoPressed: () {
+        _favoritos(_pokemon!.formatName);
+      },
     );
   }
 }
